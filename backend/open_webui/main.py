@@ -497,6 +497,53 @@ app = FastAPI(
 # Used by readiness checks to gate traffic until startup work is done.
 app.state.startup_complete = False
 
+# Cloudflare (and some proxies) strip the trailing slash from collection URLs
+# such as /api/v1/chats/. FastAPI only registers those list endpoints as
+# /api/v1/chats/, so the unslashed path falls through to the SPA mount and
+# returns index.html. The sidebar then fails to JSON-parse the chat list and
+# stays on "Loading...".
+_API_COLLECTION_ROOTS = frozenset(
+    {
+        '/api/v1/pipelines',
+        '/api/v1/tasks',
+        '/api/v1/images',
+        '/api/v1/audio',
+        '/api/v1/retrieval',
+        '/api/v1/configs',
+        '/api/v1/auths',
+        '/api/v1/users',
+        '/api/v1/channels',
+        '/api/v1/chats',
+        '/api/v1/notes',
+        '/api/v1/models',
+        '/api/v1/notifications',
+        '/api/v1/knowledge',
+        '/api/v1/prompts',
+        '/api/v1/tools',
+        '/api/v1/skills',
+        '/api/v1/memories',
+        '/api/v1/folders',
+        '/api/v1/groups',
+        '/api/v1/files',
+        '/api/v1/functions',
+        '/api/v1/evaluations',
+        '/api/v1/analytics',
+        '/api/v1/utils',
+        '/api/v1/terminals',
+        '/api/v1/automations',
+        '/api/v1/calendars',
+    }
+)
+
+
+@app.middleware('http')
+async def restore_api_collection_trailing_slash(request, call_next):
+    path = request.scope.get('path', '')
+    if path in _API_COLLECTION_ROOTS:
+        request.scope['path'] = f'{path}/'
+    return await call_next(request)
+
+
 # For Open WebUI OIDC/OAuth2
 oauth_manager = OAuthManager(app)
 app.state.oauth_manager = oauth_manager
